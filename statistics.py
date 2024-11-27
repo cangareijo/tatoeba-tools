@@ -6,7 +6,7 @@ from jieba import cut
 from konlpy.tag import Kkma
 from os import makedirs
 from os.path import isdir
-from random import choice, randint, shuffle
+from random import choice, randint, sample, shuffle
 from re import findall, I, search, sub
 from regex import findall as find
 from unicodedata import normalize
@@ -79,15 +79,6 @@ def loadlanguagemap():
 def getwords(text):
   return findall(r"""(?:[\w#@-][\w#@'()/,:.-]*)?[\w#@-]""", cleanupforsplitting(text))
 
-def getwordsinenglish(text):
-  return findall(
-    r"""[^\s—―…'‘"“<«\[{¿¡][^\s—―…]+[)][^\s—―…]*[^\s—―…'’"”>»)\]},:;.?!‽]|"""
-    r"""[^\s—―…'‘"“<«(\[{¿¡][^\s—―…]*[(][^\s—―…]+[^\s—―…'’"”>»\]},:;.?!‽]|"""
-    r"""(?:[^\s—―…'‘"“<«(\[{¿¡][^\s—―…]*)?(?:[^\W\d]\.){2,}(?![^\s—―…]*[^\s—―…'’"”>»)\]},:;.?!‽])|"""
-    r"""[^\s—―…'‘"“<«(\[{¿¡][^\s—―…]*[^\s—―…'’"”>»)\]},:;.?!‽]|"""
-    r"""[^\s—―…'‘’"“”<>«»()\[\]{},:;.¿?¡!‽]""",
-    cleanupforsplitting(text))
-
 def gettokens(text):
   return findall(
     r"""[^\s\u200B\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*•●▲➔][^\s\u200B\uFEFF—―…]*"""
@@ -102,7 +93,7 @@ def getwordsinlanguage(janome, kkma, language, text):
     for token in cut(text):
       words.update(getwords(token))
   elif language in ("eng", "fra", "ita", "por", "spa"):
-    words.update(getwordsinenglish(text))
+    words.update(gettokens(text))
   elif language == "jpn":
     for token in janome.tokenize(text):
       words.update(getwords(token))
@@ -519,7 +510,7 @@ def selectsentences2():
 
       for token in sentences:
         sentences[token] = [choice(sentences[token][user]) for user in sentences[token]]
-      sentences = [token + "\t" + choice(sentences[token]) for token in sentences]
+      sentences = [token + "\t" + sample(sentences[token], 5) for token in sentences]
       shuffle(sentences)
 
       print("Writing sentences (" + language + ")...")
