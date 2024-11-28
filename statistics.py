@@ -6,9 +6,10 @@ from jieba import cut
 from konlpy.tag import Kkma
 from os import makedirs
 from os.path import isdir
-from random import choice, randint, sample, shuffle
+from random import randint, sample, shuffle
 from re import findall, I, search, sub
 from regex import findall as find
+from secrets import choice
 from unicodedata import normalize
 
 minimum = 0
