@@ -5,7 +5,7 @@ from janome.tokenizer import Tokenizer
 from jieba import cut
 from konlpy.tag import Kkma
 from os import makedirs
-from os.path import isdir
+from os.path import getsize
 from random import randint, sample, shuffle
 from re import findall, I, search, sub
 from regex import findall as find
@@ -49,16 +49,6 @@ def cleanupforsorting(word):
   word = sub(r"[žż]", "z", word)
   return word
 
-def loadlanguagelist():
-  print("Loading language list...")
-  languages = []
-  read = open("temporary/languages.txt", "r", encoding = "utf-8")
-  for line in read:
-    fields = findall(r"[^\t\n]+", line)
-    languages.append(fields[0])
-  read.close()
-  return languages
-
 def loadlanguagemap():
   print("Loading language map...")
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
@@ -93,14 +83,21 @@ def getwordsinlanguage(janome, kkma, language, text):
   return words
 
 def loadspellchecker(language):
+  print("Loading spell checker (" + language + ")...")
   try:
+    if getsize("dictionaries/" + language + ".txt") > 10 * 1000 * 1000:
+      print("Spell checker: dictionary too large")
+      return lambda word: True
     file = open("dictionaries/" + language + ".txt", "r", encoding = "utf-8")
   except:
+    print("Spell checker: dictionary not found")
     return lambda word: True
   else:
-    print("Loading spellchecker (" + language + ")...")
     dictionary = set()
     for line in file:
+      if " " in line or "\t" in line:
+        print("Spell checker: dictionary has spaces")
+        return lambda word: True
       fields = findall(r"[^\t\n]+", line)
       dictionary.add(fields[0])
       dictionary.add(fields[0].upper())
@@ -108,11 +105,12 @@ def loadspellchecker(language):
     file.close()
     return lambda word: word in dictionary
 
-def writelanguagelist():
-  print("Reading language write...")
+def listlanguages():
+  print("Listing languages...")
   frequency = {}
   sample = {}
 
+  print("Reading languages...")
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
   for line in read:
     fields = findall(r"[^\t\n]+", line)
@@ -130,17 +128,27 @@ def writelanguagelist():
   for language in frequency:
     frequency[language] = sum(frequency[language][user] for user in frequency[language])
     sample[language] = choice([sample[language][user] for user in sample[language]])
-  
+
   languages = list(frequency)
   shuffle(languages)
   languages.sort(key = lambda language: frequency[language], reverse = True)
 
-  print("Writing language write...")
+  print("Writing languages...")
   makedirs("temporary", exist_ok = True)
   write = open("temporary/languages.txt", "w", encoding = "utf-8")
   for language in languages:
     print(language, frequency[language], sample[language], sep = "\t", end = "", file = write)
   write.close()
+
+def loadlanguagelist():
+  print("Loading language list...")
+  languages = []
+  read = open("temporary/languages.txt", "r", encoding = "utf-8")
+  for line in read:
+    fields = findall(r"[^\t\n]+", line)
+    languages.append(fields[0])
+  read.close()
+  return languages
 
 def partitionsentences():
   write = {}
@@ -191,7 +199,7 @@ def subpartitionlinks():
   for idiom in languages:
     if idiom != "\\N":
       writes = {}
-      
+
       print("Writing links (" + idiom + ")...")
       makedirs("temporary/links/" + idiom, exist_ok = True)
       for tongue in languages:
@@ -210,9 +218,7 @@ def subpartitionlinks():
 
 def listcharacters():
   print("Listing characters...")
-
   languages = loadlanguagelist()
-
   makedirs("characters", exist_ok = True)
   for language in languages:
     if language != "\\N":
@@ -246,68 +252,46 @@ def listcharacters():
         print(hex(ord(character)), character, frequency[character], sample[character], sep = "\t", end = "", file = write)
       write.close()
 
-def countwords():
-  print("Counting frequency of words...")
-
+def listwords():
+  print("Listing words...")
   languages = loadlanguagelist()
-
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
-  if not isdir("words"):
-    makedirs("words")
+  makedirs("words", exist_ok = True)
   for language in languages:
     if language != "\\N":
-      spellchecks = loadspellchecker(language)
-
-      print("Reading old words (" + language + ")...")
-      words = set()
-      oldsentences = {}
-      identification = {}
-      owner = {}
-      try:
-        read = open("words-old/words-" + language + ".txt", "r", encoding = "utf-8")
-      except:
-        pass
-      else:
-        for line in read:
-          fields = findall(r"[^\t\n]+", line)
-          if fields[2] != "0":
-            words.add(fields[0])
-            oldsentences[fields[0]] = int(fields[2])
-            identification[fields[0]] = fields[4]
-            owner[fields[0]] = fields[5]
-        read.close()
+      frequencies = {}
+      sentences = {}
 
       print("Reading words (" + language + ")...")
-      newsentences = {}
-      read = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
-      for line in read:
+      file = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
+      for line in file:
         fields = findall(r"[^\t\n]+", line)
         sentence = getwordsinlanguage(janome, kkma, language, fields[2])
         for word in sentence:
-          words.add(word)
-          if word not in newsentences:
-            newsentences[word] = 0
-          newsentences[word] += 1
-          if randint(1, newsentences[word]) == 1:
-            identification[word] = fields[0]
-            owner[word] = fields[3]
-      read.close()
+          if word not in frequencies:
+            frequencies[word] = {}
+            sentences[word] = {}
+          if fields[3] not in frequencies[word]:
+            frequencies[word][fields[3]] = 0
+          frequencies[word][fields[3]] += 1
+          if randint(1, frequencies[word][fields[3]]) == 1:
+            sentences[word][fields[3]] = line
+      file.close()
 
-      for word in words:
-        if word not in oldsentences:
-          oldsentences[word] = 0
-        if word not in newsentences:
-          newsentences[word] = 0
+      for word in frequencies:
+        frequencies[word] = sum(frequencies[word][user] for user in frequencies[word])
+        sentences[word] = choice([sentences[word][user] for user in sentences[word]])
 
-      print("Writing words (" + language + ")...")
-      words = list(words)
+      words = list(frequencies)
       words.sort()
       words.sort(key = lambda word: cleanupforsorting(word))
-      write = open("words/words-" + language + ".txt", "w", encoding = "utf-8")
+
+      print("Writing words (" + language + ")...")
+      file = open("words/words-" + language + ".txt", "w", encoding = "utf-8")
       for word in words:
-        print(word, "+" + str(newsentences[word] - oldsentences[word]) if newsentences[word] >= oldsentences[word] else "−" + str(oldsentences[word] - newsentences[word]), newsentences[word], "+" if spellchecks(word) else "−", identification[word], owner[word], sep = "\t", file = write)
-      write.close()
+        print(word, frequencies[word], sentences[word], sep = "\t", end = "", file = file)
+      file.close()
 
 def counttranslations():
   print("Counting translations...")
@@ -363,8 +347,7 @@ def counttranslations():
       words.sort(key = lambda word: cleanupforsorting(word))
 
       print("Writing words (" + language + ")...")
-      if not isdir("translations/" + language):
-        makedirs("translations/" + language)
+      makedirs("translations/" + language, exist_ok = True)
       for idiom in languages[: 50]:
         if idiom != language and idiom != "\\N":
           write = open("translations/" + language + "/translations-" + language + "-" + idiom + ".txt", "w", encoding = "utf-8")
@@ -417,8 +400,7 @@ def counttranslationsuser(source, target, user):
   words.sort(key = lambda word: cleanupforsorting(word))
 
   print("Writing words (" + source + ")...")
-  if not isdir("translations-user/" + source):
-    makedirs("translations-user/" + source)
+  makedirs("translations-user/" + source, exist_ok = True)
   write = open("translations-user/" + source + "/translations-" + source + "-" + target + ".txt", "w", encoding = "utf-8")
   for word in words:
     print(word, sentences[word], translations[target][word] if word in translations[target] else 0, "+" if spellchecks(word) else "−", identification[word], owner[word], sep = "\t", file = write)
@@ -426,17 +408,15 @@ def counttranslationsuser(source, target, user):
 
 def selectsentences():
   print("Selecting sentences...")
-
   languages = loadlanguagelist()
-
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
   makedirs("sentences", exist_ok = True)
   for language in languages:
     if language != "\\N":
-      print("Reading sentences (" + language + ")...")
       sentences = {}
 
+      print("Reading sentences (" + language + ")...")
       file = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
       for line in file:
         fields = findall(r"[^\t\n]+", line)
@@ -448,16 +428,17 @@ def selectsentences():
             sentences[token][fields[3]] = []
           sentences[token][fields[3]].append(line)
       file.close()
+
       for token in sentences:
         sentences[token] = [choice(sentences[token][user]) for user in sentences[token]]
         sentences[token] = sample(sentences[token], min(5, len(sentences[token])))
-      sentences = [token + "\t" + sentence for token in sentences for sentence in sentences[token]]
+      sentences = [(token, sentence) for token in sentences for sentence in sentences[token]]
       shuffle(sentences)
 
       print("Writing sentences (" + language + ")...")
       file = open("sentences/sentences-" + language + ".txt", "w", encoding = "utf-8")
-      for sentence in sentences:
-        print(sentence, end = "", file = file)
+      for word, sentence in sentences:
+        print(word, sentence, sep = "\t", end = "", file = file)
 
 def breaksrulesofidenticalwrappingmarks(name, mark, text):
   messages = []
@@ -553,8 +534,7 @@ def breaksrulesofstraightquotationmarks(text):
 
 def findproblematic():
   print("Finding problematic...")
-  if not isdir("problematic"):
-    makedirs("problematic")
+  makedirs("problematic", exist_ok = True)
   for language in ("ber", "cat", "ces", "dan", "deu", "eng", "epo", "est", "fin", "fra", "gle", "glg", "hun", "isl", "ita", "kab", "kor", "lat", "lit", "lvs", "nld", "nob", "pol", "por", "ron", "slk", "spa", "swe", "tgl", "tok", "tur", "vie"):
     misspelled = {}
     try:
@@ -631,6 +611,9 @@ def findproblematic():
 
       if language in ("por",) and findall(r"""ü""", fields[2], flags = I):
         print("Dieresis: not used", line, sep = "\t", end = "", file = write)
+
+      if findall(r"""[0-9].*[０-９]|[０-９].*[0-9]""", fields[2], flags = I):
+        print("Digits: both normal and full-width digits are being used", line, sep = "\t", end = "", file = write)
 
       if findall(r"""\u2033""", fields[2], flags = I):
         print("Double prime: possible homoglyph", line, sep = "\t", end = "", file = write)
@@ -772,8 +755,7 @@ def findsimilar():
   language = {}
   user = {}
   seen = {}
-  if not isdir("similar"): 
-    makedirs("similar")
+  makedirs("similar", exist_ok = True)
   write = {}
   write["!"] = open("similar/similar.txt", "w", encoding = "utf-8")
   for line in read:
@@ -796,7 +778,7 @@ def findsimilar():
   for tongue in write:
     write[tongue].close()
 
-writelanguagelist()
+listlanguages()
 print("")
 partitionsentences()
 print("")
@@ -806,7 +788,7 @@ subpartitionlinks()
 print("")
 listcharacters()
 print("")
-countwords()
+listwords()
 print("")
 counttranslations()
 print("")
