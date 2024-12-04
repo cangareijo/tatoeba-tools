@@ -240,11 +240,11 @@ def listcharacters():
             sample[character][fields[3]] = line
       read.close()
 
-      for character in frequency:
-        frequency[character] = sum(frequency[character][user] for user in frequency[character])
-        sample[character] = choice([sample[character][user] for user in sample[character]])
       characters = list(frequency)
       characters.sort()
+      for character in characters:
+        frequency[character] = sum(frequency[character][user] for user in frequency[character])
+        sample[character] = choice([sample[character][user] for user in sample[character]])
 
       print("Writing characters (" + language + ")...")
       write = open("characters/characters-" + language + ".txt", "w", encoding = "utf-8")
@@ -254,16 +254,15 @@ def listcharacters():
 
 def listwords():
   print("Listing words...")
-  languages = loadlanguagelist()
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
+  languages = loadlanguagelist()
   makedirs("words", exist_ok = True)
   for language in languages:
     if language != "\\N":
+      print("Reading words (" + language + ")...")
       frequencies = {}
       sentences = {}
-
-      print("Reading words (" + language + ")...")
       file = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
       for line in file:
         fields = findall(r"[^\t\n]+", line)
@@ -279,13 +278,12 @@ def listwords():
             sentences[word][fields[3]] = line
       file.close()
 
-      for word in frequencies:
-        frequencies[word] = sum(frequencies[word][user] for user in frequencies[word])
-        sentences[word] = choice([sentences[word][user] for user in sentences[word]])
-
       words = list(frequencies)
       words.sort()
       words.sort(key = lambda word: cleanupforsorting(word))
+      for word in words:
+        frequencies[word] = sum(frequencies[word][user] for user in frequencies[word])
+        sentences[word] = choice([sentences[word][user] for user in sentences[word]])
 
       print("Writing words (" + language + ")...")
       file = open("words/words-" + language + ".txt", "w", encoding = "utf-8")
@@ -295,64 +293,54 @@ def listwords():
 
 def counttranslations():
   print("Counting translations...")
-
-  languages = loadlanguagelist()
-
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
+  languages = loadlanguagelist()
   for language in languages[: 50]:
     if language != "\\N":
-      spellchecks = loadspellchecker(language)
-
-      print("Reading links (" + language + ")...")
-      linked = {}
-      for idiom in languages[: 50]:
-        if idiom != language and idiom != "\\N":
-          read = open("temporary/links/" + language + "/" + idiom + ".txt", "r", encoding = "utf-8")
-          linked[idiom] = set()
-          for line in read:
-            fields = findall(r"[^\t\n]+", line)
-            linked[idiom].add(fields[0])
-          read.close()
-
       print("Reading words (" + language + ")...")
-      read = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
-      words = set()
+      frequencies = {}
       sentences = {}
-      translations = {}
-      identification = {}
-      owner = {}
-      for idiom in languages[: 50]:
-        translations[idiom] = {}
-      for line in read:
+      sentencewords = {}
+      file = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
+      for line in file:
         fields = findall(r"[^\t\n]+", line)
-        sentence = getwordsinlanguage(janome, kkma, language, fields[2].lower())
-        for word in sentence:
-          words.add(word)
-          if word not in sentences:
-            sentences[word] = 0
-          sentences[word] += 1
-          if randint(1, sentences[word]) == 1:
-            identification[word] = fields[0]
-            owner[word] = fields[3]
-          for idiom in languages[: 50]:
-            if idiom != language and idiom != "\\N":
-              if fields[0] in linked[idiom]:
-                if word not in translations[idiom]:
-                  translations[idiom][word] = 0
-                translations[idiom][word] += 1
-      read.close()
-      words = list(words)
+        sentencewords[int(fields[0])] = getwordsinlanguage(janome, kkma, language, fields[2])
+        for word in sentencewords[int(fields[0])]:
+          if word not in frequencies:
+            frequencies[word] = {}
+            sentences[word] = {}
+          if fields[3] not in frequencies[word]:
+            frequencies[word][fields[3]] = 0
+          frequencies[word][fields[3]] += 1
+          if randint(1, frequencies[word][fields[3]]) == 1:
+            sentences[word][fields[3]] = line
+      file.close()
+
+      words = list(frequencies)
       words.sort()
       words.sort(key = lambda word: cleanupforsorting(word))
+      for word in words:
+        frequencies[word] = sum(frequencies[word][user] for user in frequencies[word])
+        sentences[word] = choice([sentences[word][user] for user in sentences[word]])
 
-      print("Writing words (" + language + ")...")
       makedirs("translations/" + language, exist_ok = True)
       for idiom in languages[: 50]:
         if idiom != language and idiom != "\\N":
+          print("Reading links (" + language + "-" + idiom + ")...")
+          translations = {word: 0 for word in words}
+          file = open("temporary/links/" + language + "/" + idiom + ".txt", "r", encoding = "utf-8")
+          for line in file:
+            fields = findall(r"[^\t\n]+", line)
+            if int(fields[0]) in sentencewords:
+              for word in sentencewords[int(fields[0])]:
+                translations[word] += 1
+          file.close()
+
+          print("Writing words (" + language + "-" + idiom + ")...")
           write = open("translations/" + language + "/translations-" + language + "-" + idiom + ".txt", "w", encoding = "utf-8")
           for word in words:
-            print(word, sentences[word], translations[idiom][word] if word in translations[idiom] else 0, "+" if spellchecks(word) else "−", identification[word], owner[word], sep = "\t", file = write)
+            print(word, frequencies[word], translations[word], sentences[word], sep = "\t", end = "", file = write)
           write.close()
 
 def counttranslationsuser(source, target, user):
