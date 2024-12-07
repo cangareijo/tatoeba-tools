@@ -4,7 +4,7 @@
 from janome.tokenizer import Tokenizer
 from jieba import cut
 from konlpy.tag import Kkma
-from os import makedirs
+from os import makedirs, scandir
 from os.path import getsize
 from random import choice, randint, sample, shuffle
 from re import findall, I, search, sub
@@ -68,8 +68,8 @@ def getwordsinlanguage(janome, kkma, language, text):
     words.update(gettokens(text))
   return words
 
-def loadlanguagemap():
-  print("Loading language map...")
+def loadlanguagedictionary():
+  print("Loading language dictionary...")
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
   language = {}
   for line in read:
@@ -114,18 +114,15 @@ def listlanguages():
 
 def loadlanguagelist():
   print("Loading language list...")
-  languages = []
   read = open("languages.txt", "r", encoding = "utf-8")
   for line in read:
     fields = findall(r"[^\t\n]+", line)
-    languages.append(fields[0])
+    yield fields[0]
   read.close()
-  return languages
 
 def partitionsentences():
-  write = {}
-
   print("Partitioning sentences...")
+  write = {}
   makedirs("temporary/sentences", exist_ok = True)
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
   for line in read:
@@ -135,14 +132,30 @@ def partitionsentences():
         write[fields[1]] = open("temporary/sentences/" + fields[1] + ".txt", "w", encoding = "utf-8")
       print(line, end = "", file = write[fields[1]])
   read.close()
-
   for language in write:
     write[language].close()
+
+def subpartitionsentences():
+  print("Subpartitioning sentences...")
+  for language in loadlanguagelist():
+    if language != "\\N":
+      write = {}
+      makedirs("temporary/sentences/" + language, exist_ok = True)
+      read = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
+      for line in read:
+        fields = findall(r"[^\t\n]+", line)
+        if fields[3] != "\\N":
+          if fields[3] not in write:
+            write[fields[3]] = open("temporary/sentences/" + language + "/" + fields[3], "w", encoding = "utf-8")
+          print(line, end = "", file = write[fields[3]])
+      read.close()
+      for user in write:
+        write[user].close()
 
 def partitionlinks():
   print("Partitioning links...")
 
-  languageof = loadlanguagemap()
+  languageof = loadlanguagedictionary()
   write = {}
 
   print("Writing links...")
@@ -164,8 +177,8 @@ def partitionlinks():
 def subpartitionlinks():
   print("Subpartitioning links...")
 
-  languages = loadlanguagelist()
-  languageof = loadlanguagemap()
+  languages = list(loadlanguagelist())
+  languageof = loadlanguagedictionary()
 
   for idiom in languages:
     if idiom != "\\N":
@@ -189,30 +202,33 @@ def subpartitionlinks():
 
 def listusers():
   print("Listing users...")
-  makedirs("users", exist_ok = True)
-  for language in loadlanguagelist():
-    if language != "\\N":
-      print("Reading users (" + language + ")...")
+  janome = Tokenizer(wakati = True)
+  kkma = Kkma()
+  for entry in scandir("temporary/sentences"):
+    if entry.is_dir():
+      print("Reading users (" + entry.name + ")...")
       frequencies = {}
+      distinct = {}
       sentences = {}
-      read = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
-      for line in read:
-        fields = findall(r"[^\t\n]+", line)
-        if fields[3] not in frequencies:
-          frequencies[fields[3]] = 0
-        frequencies[fields[3]] += 1
-        if randint(1, frequencies[fields[3]]) == 1:
-          sentences[fields[3]] = line
-      read.close()
-
+      for subentry in scandir("temporary/sentences/" + entry.name):
+        frequencies[subentry.name] = 0
+        distinct[subentry.name] = set()
+        read = open("temporary/sentences/" + entry.name + "/" + subentry.name, "r", encoding = "utf-8")
+        for line in read:
+          fields = findall(r"[^\t\n]+", line)
+          frequencies[subentry.name] += 1
+          distinct[subentry.name].update(getwordsinlanguage(janome, kkma, entry.name, fields[2]))
+          if randint(1, frequencies[subentry.name]) == 1:
+            sentences[subentry.name] = line
+        read.close()
+        distinct[subentry.name] = len(distinct[subentry.name])
       users = list(frequencies)
       shuffle(users)
       users.sort(key = lambda user: frequencies[user], reverse = True)
-
-      print("Writing users (" + language + ")...")
-      write = open("users/users-" + language + ".txt", "w", encoding = "utf-8")
+      print("Writing users (" + entry.name + ")...")
+      write = open("users/users-" + entry.name + ".txt", "w", encoding = "utf-8")
       for user in users:
-        print(user, frequencies[user], sentences[user], sep = "\t", end = "", file = write)
+        print(user, frequencies[user], distinct[user], sentences[user], sep = "\t", end = "", file = write)
       write.close()
 
 def listcharacters():
@@ -254,9 +270,8 @@ def listwords():
   print("Listing words...")
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
-  languages = loadlanguagelist()
   makedirs("words", exist_ok = True)
-  for language in languages:
+  for language in loadlanguagelist():
     if language != "\\N":
       print("Reading words (" + language + ")...")
       frequencies = {}
@@ -293,7 +308,7 @@ def counttranslations():
   print("Counting translations...")
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
-  languages = loadlanguagelist()
+  languages = list(loadlanguagelist())
   for language in languages[: 50]:
     if language != "\\N":
       print("Reading words (" + language + ")...")
@@ -334,11 +349,10 @@ def counttranslations():
 
 def selectsentences():
   print("Selecting sentences...")
-  languages = loadlanguagelist()
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
   makedirs("sentences", exist_ok = True)
-  for language in languages:
+  for language in loadlanguagelist():
     if language != "\\N":
       sentences = {}
 
@@ -700,6 +714,8 @@ def findsimilar():
 listlanguages()
 print("")
 partitionsentences()
+print("")
+subpartitionsentences()
 print("")
 partitionlinks()
 print("")
