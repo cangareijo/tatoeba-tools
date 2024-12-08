@@ -47,13 +47,13 @@ def cleanupforsorting(word):
 
 def gettokens(text):
   return findall(
-    r"""[^\s\u200B\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*•●▲➔][^\s\u200B\uFEFF—―…]*"""
-    r"""[^\s\u200B\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*•●▲➔]|"""
-    r"""[^\s\u200B\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*•●▲➔]|"""
-    r"""[\s\u200B\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*•●▲➔]+""",
+    r"""[^\s\u200B\u200E\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*·•●▲➔][^\s\u200B\uFEFF—―…]*"""
+    r"""[^\s\u200B\u200E\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*·•●▲➔]|"""
+    r"""[^\s\u200B\u200E\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*·•●▲➔]|"""
+    r"""[\s\u200B\u200E\uFEFF—―…'‚‘’"„“”<>‹›«»「」『』()\[\]{}【】《》〈〉|/,:;.¿?¡!‽*·•●▲➔]+""",
     text)
 
-def getwordsinlanguage(janome, kkma, language, text):
+def gettokensinlanguage(janome, kkma, language, text):
   words = set()
   if language in ("cmn", "lzh", "wuu", "yue"):
     for token in cut(text):
@@ -68,15 +68,52 @@ def getwordsinlanguage(janome, kkma, language, text):
     words.update(gettokens(text))
   return words
 
-def loadlanguagedictionary():
-  print("Loading language dictionary...")
+def partitionsentences():
+  print("Partitioning sentences...")
+  write = {}
+  makedirs("temporary/sentences", exist_ok = True)
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
-  language = {}
   for line in read:
     fields = findall(r"[^\t\n]+", line)
-    language[fields[0]] = fields[1]
+    if fields[1] != "\\N":
+      makedirs("temporary/sentences/" + fields[1], exist_ok = True)
+      if fields[1] not in write:
+        write[fields[1]] = {}
+      if fields[3] not in write[fields[1]]:
+        write[fields[1]][fields[3]] = open("temporary/sentences/" + fields[1] + "/" + fields[3], "w", encoding = "utf-8")
+      print(line, end = "", file = write[fields[1]][fields[3]])
   read.close()
-  return language
+  for language in write:
+    for user in write[language]:
+      write[language][user].close()
+
+def partitionlinks():
+  print("Partitioning links...")
+  print("Reading languages...")
+  languages = {}
+  read = open("sentences_detailed.csv", "r", encoding = "utf-8")
+  for line in read:
+    fields = findall(r"[^\t\n]+", line)
+    languages[int(fields[0])] = fields[1]
+  read.close()
+
+  print("Writing links...")
+  write = {}
+  makedirs("temporary/links", exist_ok = True)
+  read = open("links.csv", "r", encoding = "utf-8")
+  for line in read:
+    fields = findall(r"[^\t\n]+", line)
+    if int(fields[0]) in languages and languages[int(fields[0])] != "\\N" and int(fields[1]) in languages and languages[int(fields[1])] != "\\N":
+      makedirs("temporary/links/" + languages[int(fields[0])], exist_ok = True)
+      if languages[int(fields[0])] not in write:
+        write[languages[int(fields[0])]] = {}
+      if languages[int(fields[1])] not in write[languages[int(fields[0])]]:
+        write[languages[int(fields[0])]][languages[int(fields[1])]] = open("temporary/links/" + languages[int(fields[0])] + "/" + languages[int(fields[1])], "w", encoding = "utf-8")
+      print(fields[0], fields[1], sep = "\t", file = write[languages[int(fields[0])]][languages[int(fields[1])]])
+  read.close()
+  for language in write:
+    for tongue in write[language]:
+      write[language][tongue].close()
 
 def listlanguages():
   print("Listing languages...")
@@ -112,94 +149,6 @@ def listlanguages():
     print(language, frequencies[language], sentences[language], sep = "\t", end = "", file = write)
   write.close()
 
-def loadlanguagelist():
-  print("Loading language list...")
-  read = open("languages.txt", "r", encoding = "utf-8")
-  for line in read:
-    fields = findall(r"[^\t\n]+", line)
-    yield fields[0]
-  read.close()
-
-def partitionsentences():
-  print("Partitioning sentences...")
-  write = {}
-  makedirs("temporary/sentences", exist_ok = True)
-  read = open("sentences_detailed.csv", "r", encoding = "utf-8")
-  for line in read:
-    fields = findall(r"[^\t\n]+", line)
-    if fields[1] != "\\N":
-      if fields[1] not in write:
-        write[fields[1]] = open("temporary/sentences/" + fields[1] + ".txt", "w", encoding = "utf-8")
-      print(line, end = "", file = write[fields[1]])
-  read.close()
-  for language in write:
-    write[language].close()
-
-def subpartitionsentences():
-  print("Subpartitioning sentences...")
-  for language in loadlanguagelist():
-    if language != "\\N":
-      write = {}
-      makedirs("temporary/sentences/" + language, exist_ok = True)
-      read = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
-      for line in read:
-        fields = findall(r"[^\t\n]+", line)
-        if fields[3] != "\\N":
-          if fields[3] not in write:
-            write[fields[3]] = open("temporary/sentences/" + language + "/" + fields[3], "w", encoding = "utf-8")
-          print(line, end = "", file = write[fields[3]])
-      read.close()
-      for user in write:
-        write[user].close()
-
-def partitionlinks():
-  print("Partitioning links...")
-
-  languageof = loadlanguagedictionary()
-  write = {}
-
-  print("Writing links...")
-  makedirs("temporary/links", exist_ok = True)
-  for language in loadlanguagelist():
-    if language != "\\N":
-      write[language] = open("temporary/links/" + language + ".txt", "w", encoding = "utf-8")
-
-  read = open("links.csv", "r", encoding = "utf-8")
-  for line in read:
-    fields = findall(r"[^\t\n]+", line)
-    if fields[0] in languageof and languageof[fields[0]] != "\\N":
-      print(fields[0], fields[1], sep = "\t", file = write[languageof[fields[0]]])
-  read.close()
-
-  for language in write:
-    write[language].close()
-
-def subpartitionlinks():
-  print("Subpartitioning links...")
-
-  languages = list(loadlanguagelist())
-  languageof = loadlanguagedictionary()
-
-  for idiom in languages:
-    if idiom != "\\N":
-      writes = {}
-
-      print("Writing links (" + idiom + ")...")
-      makedirs("temporary/links/" + idiom, exist_ok = True)
-      for tongue in languages:
-        if tongue != "\\N":
-          writes[tongue] = open("temporary/links/" + idiom + "/" + tongue + ".txt", "w", encoding = "utf-8")
-
-      read = open("temporary/links/" + idiom + ".txt", "r", encoding = "utf-8")
-      for line in read:
-        fields = findall(r"[^\t\n]+", line)
-        if fields[1] in languageof and languageof[fields[1]] != "\\N":
-          print(fields[0], fields[1], sep = "\t", file = writes[languageof[fields[1]]])
-      read.close()
-
-      for tongue in writes:
-        writes[tongue].close()
-
 def listusers():
   print("Listing users...")
   janome = Tokenizer(wakati = True)
@@ -217,7 +166,7 @@ def listusers():
         for line in read:
           fields = findall(r"[^\t\n]+", line)
           frequencies[subentry.name] += 1
-          distinct[subentry.name].update(getwordsinlanguage(janome, kkma, entry.name, fields[2]))
+          distinct[subentry.name].update(gettokensinlanguage(janome, kkma, entry.name, fields[2]))
           if randint(1, frequencies[subentry.name]) == 1:
             sentences[subentry.name] = line
         read.close()
@@ -232,27 +181,27 @@ def listusers():
       write.close()
 
 def listcharacters():
-  print("Listing characters...")
   makedirs("characters", exist_ok = True)
-  for language in loadlanguagelist():
-    if language != "\\N":
+  for entry in scandir("temporary/sentences"):
+    if entry.is_dir():
+      print("Listing characters (" + entry.name + ")...")
       frequencies = {}
       sentences = {}
 
-      print("Reading characters (" + language + ")...")
-      read = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
-      for line in read:
-        fields = findall(r"[^\t\n]+", line)
-        for character in set(fields[2]):
-          if character not in frequencies:
-            frequencies[character] = {}
-            sentences[character] = {}
-          if fields[3] not in frequencies[character]:
-            frequencies[character][fields[3]] = 0
-          frequencies[character][fields[3]] += 1
-          if randint(1, frequencies[character][fields[3]]) == 1:
-            sentences[character][fields[3]] = line
-      read.close()
+      for subentry in scandir("temporary/sentences/" + entry.name):
+        file = open("temporary/sentences/" + entry.name + "/" + subentry.name, "r", encoding = "utf-8")
+        for line in file:
+          fields = findall(r"[^\t\n]+", line)
+          for character in set(fields[2]):
+            if character not in frequencies:
+              frequencies[character] = {}
+              sentences[character] = {}
+            if fields[3] not in frequencies[character]:
+              frequencies[character][fields[3]] = 0
+            frequencies[character][fields[3]] += 1
+            if randint(1, frequencies[character][fields[3]]) == 1:
+              sentences[character][fields[3]] = line
+        file.close()
 
       characters = list(frequencies)
       characters.sort()
@@ -260,36 +209,35 @@ def listcharacters():
         frequencies[character] = sum(frequencies[character][user] for user in frequencies[character])
         sentences[character] = choice([sentences[character][user] for user in sentences[character]])
 
-      print("Writing characters (" + language + ")...")
-      write = open("characters/characters-" + language + ".txt", "w", encoding = "utf-8")
+      write = open("characters/characters-" + entry.name + ".txt", "w", encoding = "utf-8")
       for character in characters:
         print(hex(ord(character)), character, frequencies[character], sentences[character], sep = "\t", end = "", file = write)
       write.close()
 
 def listwords():
-  print("Listing words...")
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
   makedirs("words", exist_ok = True)
-  for language in loadlanguagelist():
-    if language != "\\N":
-      print("Reading words (" + language + ")...")
+  for entry in scandir("temporary/sentences"):
+    if entry.is_dir():
+      print("Listing words (" + entry.name + ")...")
       frequencies = {}
       sentences = {}
-      file = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
-      for line in file:
-        fields = findall(r"[^\t\n]+", line)
-        sentence = getwordsinlanguage(janome, kkma, language, fields[2])
-        for word in sentence:
-          if word not in frequencies:
-            frequencies[word] = {}
-            sentences[word] = {}
-          if fields[3] not in frequencies[word]:
-            frequencies[word][fields[3]] = 0
-          frequencies[word][fields[3]] += 1
-          if randint(1, frequencies[word][fields[3]]) == 1:
-            sentences[word][fields[3]] = line
-      file.close()
+      for subentry in scandir("temporary/sentences/" + entry.name):
+        file = open("temporary/sentences/" + entry.name + "/" + subentry.name, "r", encoding = "utf-8")
+        for line in file:
+          fields = findall(r"[^\t\n]+", line)
+          sentence = gettokensinlanguage(janome, kkma, entry.name, fields[2])
+          for word in sentence:
+            if word not in frequencies:
+              frequencies[word] = {}
+              sentences[word] = {}
+            if fields[3] not in frequencies[word]:
+              frequencies[word][fields[3]] = 0
+            frequencies[word][fields[3]] += 1
+            if randint(1, frequencies[word][fields[3]]) == 1:
+              sentences[word][fields[3]] = line
+        file.close()
 
       words = list(frequencies)
       words.sort()
@@ -298,76 +246,69 @@ def listwords():
         frequencies[word] = sum(frequencies[word][user] for user in frequencies[word])
         sentences[word] = choice([sentences[word][user] for user in sentences[word]])
 
-      print("Writing words (" + language + ")...")
-      file = open("words/words-" + language + ".txt", "w", encoding = "utf-8")
+      file = open("words/words-" + entry.name + ".txt", "w", encoding = "utf-8")
       for word in words:
         print(word, frequencies[word], sentences[word], sep = "\t", end = "", file = file)
       file.close()
 
 def counttranslations():
-  print("Counting translations...")
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
-  languages = list(loadlanguagelist())
-  for language in languages[: 50]:
-    if language != "\\N":
-      print("Reading words (" + language + ")...")
-      frequencies = {}
+  for entry in scandir("temporary/links"):
+    if entry.is_dir():
+      print("Counting translations (" + entry.name + ")...")
       sentencewords = {}
-      file = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
-      for line in file:
-        fields = findall(r"[^\t\n]+", line)
-        sentencewords[int(fields[0])] = getwordsinlanguage(janome, kkma, language, fields[2])
-        for word in sentencewords[int(fields[0])]:
-          if word not in frequencies:
-            frequencies[word] = 0
-          frequencies[word] += 1
-      file.close()
+      for subentry in scandir("temporary/sentences/" + entry.name):
+        file = open("temporary/sentences/" + entry.name + "/" + subentry.name, "r", encoding = "utf-8")
+        for line in file:
+          fields = findall(r"[^\t\n]+", line)
+          sentencewords[int(fields[0])] = gettokensinlanguage(janome, kkma, entry.name, fields[2])
+        file.close()
 
-      words = list(frequencies)
-      words.sort()
-      words.sort(key = lambda word: cleanupforsorting(word))
-
-      makedirs("translations/" + language, exist_ok = True)
-      for idiom in languages[: 50]:
-        if idiom != language and idiom != "\\N":
-          print("Reading links (" + language + "-" + idiom + ")...")
-          translations = {word: 0 for word in words}
-          file = open("temporary/links/" + language + "/" + idiom + ".txt", "r", encoding = "utf-8")
+      makedirs("translations/" + entry.name, exist_ok = True)
+      for subentry in scandir("temporary/links/" + entry.name):
+        if subentry.name != entry.name:
+          translations = {}
+          file = open("temporary/links/" + entry.name + "/" + subentry.name, "r", encoding = "utf-8")
           for line in file:
             fields = findall(r"[^\t\n]+", line)
             if int(fields[0]) in sentencewords:
               for word in sentencewords[int(fields[0])]:
+                if word not in translations:
+                  translations[word] = 0
                 translations[word] += 1
           file.close()
 
-          print("Writing words (" + language + "-" + idiom + ")...")
-          write = open("translations/" + language + "/translations-" + language + "-" + idiom + ".txt", "w", encoding = "utf-8")
+          words = list(translations)
+          words.sort()
+          words.sort(key = lambda word: cleanupforsorting(word))
+
+          write = open("translations/" + entry.name + "/translations-" + entry.name + "-" + subentry.name + ".txt", "w", encoding = "utf-8")
           for word in words:
-            print(word, frequencies[word], translations[word], sep = "\t", file = write)
+            print(word, translations[word], sep = "\t", file = write)
           write.close()
 
 def selectsentences():
-  print("Selecting sentences...")
   janome = Tokenizer(wakati = True)
   kkma = Kkma()
   makedirs("sentences", exist_ok = True)
-  for language in loadlanguagelist():
-    if language != "\\N":
+  for entry in scandir("temporary/sentences"):
+    if entry.is_dir():
+      print("Selecting sentences (" + entry.name + ")...")
       sentences = {}
 
-      print("Reading sentences (" + language + ")...")
-      file = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
-      for line in file:
-        fields = findall(r"[^\t\n]+", line)
-        sentence = getwordsinlanguage(janome, kkma, language, fields[2])
-        for token in sentence:
-          if token not in sentences:
-            sentences[token] = {}
-          if fields[3] not in sentences[token]:
-            sentences[token][fields[3]] = []
-          sentences[token][fields[3]].append(line)
-      file.close()
+      for subentry in scandir("temporary/sentences/" + entry.name):
+        file = open("temporary/sentences/" + entry.name + "/" + subentry.name, "r", encoding = "utf-8")
+        for line in file:
+          fields = findall(r"[^\t\n]+", line)
+          sentence = gettokensinlanguage(janome, kkma, entry.name, fields[2])
+          for token in sentence:
+            if token not in sentences:
+              sentences[token] = {}
+            if fields[3] not in sentences[token]:
+              sentences[token][fields[3]] = []
+            sentences[token][fields[3]].append(line)
+        file.close()
 
       for token in sentences:
         sentences[token] = [choice(sentences[token][user]) for user in sentences[token]]
@@ -375,8 +316,7 @@ def selectsentences():
       sentences = [(token, sentence) for token in sentences for sentence in sentences[token]]
       shuffle(sentences)
 
-      print("Writing sentences (" + language + ")...")
-      file = open("sentences/sentences-" + language + ".txt", "w", encoding = "utf-8")
+      file = open("sentences/sentences-" + entry.name + ".txt", "w", encoding = "utf-8")
       for word, sentence in sentences:
         print(word, sentence, sep = "\t", end = "", file = file)
 
@@ -474,6 +414,8 @@ def breaksrulesofstraightquotationmarks(text):
 
 def findproblematic():
   print("Finding problematic...")
+  janome = Tokenizer(wakati = True)
+  kkma = Kkma()
   makedirs("problematic", exist_ok = True)
   for language in ("ber", "cat", "ces", "cmn", "dan", "deu", "eng", "epo", "est", "fin", "fra", "gle", "glg", "hun", "isl", "ita", "jpn", "kab", "kor", "lat", "lit", "lvs", "nld", "nob", "pol", "por", "ron", "slk", "spa", "swe", "tgl", "tok", "tur", "vie"):
     misspelled = {}
@@ -482,21 +424,28 @@ def findproblematic():
     except:
       pass
     else:
-      print("Loading misspelled (" + language + ")...")
       for line in file:
         fields = findall(r"[^\t\n]+", line)
         misspelled[fields[0]] = fields[1]
         misspelled[fields[0].upper()] = fields[1].upper()
         misspelled[fields[0][: 1].upper() + fields[0][1 :]] = fields[1][: 1].upper() + fields[1][1 :]
       file.close()
-
-    foreign = {}
     try:
-      file = open("misspelled/foreign-" + language + ".txt", "r", encoding = "utf-8")
+      file = open("misspelled/case-" + language + ".txt", "r", encoding = "utf-8")
     except:
       pass
     else:
-      print("Loading foreign (" + language + ")...")
+      for line in file:
+        fields = findall(r"[^\t\n]+", line)
+        misspelled[fields[0]] = fields[1]
+      file.close()
+
+    foreign = {}
+    try:
+      file = open("foreign/foreign-" + language + ".txt", "r", encoding = "utf-8")
+    except:
+      pass
+    else:
       for line in file:
         fields = findall(r"[^\t\n]+", line)
         foreign[fields[0]] = fields[1]
@@ -504,191 +453,205 @@ def findproblematic():
         foreign[fields[0][: 1].upper() + fields[0][1 :]] = fields[1][: 1].upper() + fields[1][1 :]
       file.close()
 
+    sensitive = set()
+    try:
+      file = open("sensitive/sensitive-" + language + ".txt", "r", encoding = "utf-8")
+    except:
+      pass
+    else:
+      for line in file:
+        fields = findall(r"[^\t\n]+", line)
+        sensitive.add(fields[0])
+        sensitive.add(fields[0].upper())
+        sensitive.add(fields[0][: 1].upper() + fields[0][1 :])
+      file.close()
+
     print("Writing sentences (" + language + ")...")
-    read = open("temporary/sentences/" + language + ".txt", "r", encoding = "utf-8")
     write = open("problematic/problematic-" + language + ".txt", "w", encoding = "utf-8")
-    for line in read:
-      fields = findall(r"[^\t\n]+", line)
+    for entry in scandir("temporary/sentences/" + language):
+      read = open("temporary/sentences/" + language + "/" + entry.name, "r", encoding = "utf-8")
+      for line in read:
+        fields = findall(r"[^\t\n]+", line)
 
-      for message in breaksrulesofsymmetricwrappingmarks("Braces", r"\{", r"\}", fields[2]):
-        print(message, line, sep = "\t", end = "", file = write)
-
-      for message in breaksrulesofsymmetricwrappingmarks("Brackets", r"\[", r"\]", fields[2]):
-        print(message, line, sep = "\t", end = "", file = write)
-
-      if language in ("nld",) and find(r"""^((?!\.\.\.)(?!…)\W)*\p{Ll}(?<!'s\b)(?<!'t\b)""", fields[2]):
-        print("Capitalization", line, sep = "\t", end = "", file = write)
-      if language not in ("nld", "tok") and find(r"""^((?!\.\.\.)(?!…)\W)*\p{Ll}""", fields[2]):
-        print("Capitalization", line, sep = "\t", end = "", file = write)
-
-      if language in ("por",) and findall(r"""ç[ei]""", fields[2], flags = I):
-        print("Cedilla: followed by e or i", line, sep = "\t", end = "", file = write)
-      if language in ("ron",) and findall(r"""[şţ]""", fields[2], flags = I):
-        print("Cedilla: possible homoglyph", line, sep = "\t", end = "", file = write)
-
-      if findall(r"""\D:\d""", fields[2], flags = I):
-        print("Colon: not preceeded by digit", line, sep = "\t", end = "", file = write)
-      if language in ("ber", "fra", "kab") and findall(r"""[^\s\d]:""", fields[2], flags = I):
-        print("Colon: preceeded by letter or punctuation", line, sep = "\t", end = "", file = write)
-      if language not in ("ber", "fra", "kab") and findall(r"""\s:""", fields[2], flags = I):
-        print("Colon: preceeded by space", line, sep = "\t", end = "", file = write)
-      if language in ("fin", "swe") and findall(r""":[^\w\s]""", fields[2], flags = I):
-        print("Colon: succeeded by punctuation", line, sep = "\t", end = "", file = write)
-      if language not in ("fin", "swe") and findall(r""":[^\d\s]""", fields[2], flags = I):
-        print("Colon: succeeded by letter or punctuation", line, sep = "\t", end = "", file = write)
-      if language in ("ber", "fra", "kab") and findall(r"""\d:\D""", fields[2], flags = I):
-        print("Colon: not succeeded by digit", line, sep = "\t", end = "", file = write)
-
-      if findall(r"""\s,""", fields[2], flags = I):
-        print("Comma: preceeded by space", line, sep = "\t", end = "", file = write)
-      if findall(r"""\D,\d""", fields[2], flags = I):
-        print("Comma: not preceeded by digit", line, sep = "\t", end = "", file = write)
-      if findall(r""",[^\W\d]""", fields[2], flags = I):
-        print("Comma: succeeded by letter", line, sep = "\t", end = "", file = write)
-
-      if findall(r"""[a-z][\u0430-\u044F]|[\u0430-\u044F][a-z]""", fields[2], flags = I):
-        print("Cyrillic characters: possible homoglyphs", line, sep = "\t", end = "", file = write)
-
-      if language in ("por",) and findall(r"""ü""", fields[2], flags = I):
-        print("Dieresis: not used", line, sep = "\t", end = "", file = write)
-
-      if language not in ("cmn", "jpn") and findall(r"""[０-９]""", fields[2], flags = I):
-        print("Digits: full-width digits", line, sep = "\t", end = "", file = write)
-      if findall(r"""[0-9].*[０-９]|[０-９].*[0-9]""", fields[2], flags = I):
-        print("Digits: mixed regular and full-width digits", line, sep = "\t", end = "", file = write)
-
-      if findall(r"""\u2033""", fields[2], flags = I):
-        print("Double prime: possible homoglyph", line, sep = "\t", end = "", file = write)
-
-      if findall(r"""([^.]|^)\.\.([^.]|$)""", fields[2], flags = I):
-        print("Ellipsis: too short", line, sep = "\t", end = "", file = write)
-
-      # if findall(r"""--|(\s|^)-(\s|$)""", fields[2], flags = I):
-      #   print("Em dash: homoglyph", line, sep = "\t", end = "", file = write)
-
-      # if findall(r"""\d-\d""", fields[2], flags = I):
-      #   print("En dash or figure dash: possible homoglyph", line, sep = "\t", end = "", file = write)
-
-      if language in ("fra",) and findall(r"""\w[!]""", fields[2], flags = I):
-        print("Exclamation mark: preceeded by letter or digit", line, sep = "\t", end = "", file = write)
-      if language not in ("fra",) and findall(r"""\s[!]""", fields[2], flags = I):
-        print("Exclamation mark: preceeded by space", line, sep = "\t", end = "", file = write)
-      if findall(r"""[!]\w""", fields[2], flags = I):
-        print("Exclamation mark: succeeded by letter or digit", line, sep = "\t", end = "", file = write)
-      if language in ("spa",) and findall(r"""\w[¡]""", fields[2], flags = I):
-        print("Inverted exclamation mark: preceeded by letter or digit", line, sep = "\t", end = "", file = write)
-      if language in ("spa",) and findall(r"""[¡]\s""", fields[2], flags = I):
-        print("Inverted exclamation mark: succeeded by space", line, sep = "\t", end = "", file = write)
-      if language in ("spa",) and findall(r"""^[^¡!]*[!]""", fields[2], flags = I):
-        print("Exclamation mark: unopened exclamation mark", line, sep = "\t", end = "", file = write)
-      if language in ("spa",) and findall(r"""[¡][^¡!]*$""", fields[2], flags = I):
-        print("Exclamation mark: unclosed exclamation mark", line, sep = "\t", end = "", file = write)
-      if language not in ("spa",) and findall(r"""[¡]""", fields[2], flags = I):
-        print("Inverted exclamation mark: not used", line, sep = "\t", end = "", file = write)
-
-      if language == "kor" and findall(r"""\w[^.…?!‽？~]*$""", fields[2], flags = I):
-        print("Final punctuation", line, sep = "\t", end = "", file = write)
-      if language != "kor" and findall(r"""\w[^.…?!‽]*$""", fields[2], flags = I):
-        print("Final punctuation", line, sep = "\t", end = "", file = write)
-
-      if findall(r"""[a-z][α-ω]|[α-ω][a-z]""", fields[2], flags = I):
-        print("Greek characters: possible homoglyphs", line, sep = "\t", end = "", file = write)
-
-      if language in ("fin", "swe"):
-        for message in breaksrulesoffinnishguillemets(fields[2]):
+        for message in breaksrulesofsymmetricwrappingmarks("Braces", r"\{", r"\}", fields[2]):
           print(message, line, sep = "\t", end = "", file = write)
-      if language in ("ber", "fra", "kab", "vie"):
-        for message in breaksrulesoffrenchguillemets(fields[2]):
+
+        for message in breaksrulesofsymmetricwrappingmarks("Brackets", r"\[", r"\]", fields[2]):
           print(message, line, sep = "\t", end = "", file = write)
-      if language in ("ces", "dan", "deu", "hun", "pol", "slk"):
-        for message in breaksrulesofsymmetricwrappingmarks("Guillemets", r"»", r"«", fields[2]):
+
+        if language in ("nld",) and find(r"""^((?!\.\.\.)(?!…)\W)*\p{Ll}(?<!'s\b)(?<!'t\b)""", fields[2]):
+          print("Capitalization", line, sep = "\t", end = "", file = write)
+        if language not in ("nld", "tok") and find(r"""^((?!\.\.\.)(?!…)\W)*\p{Ll}""", fields[2]):
+          print("Capitalization", line, sep = "\t", end = "", file = write)
+
+        if language in ("por",) and findall(r"""ç[ei]""", fields[2], flags = I):
+          print("Cedilla: followed by e or i", line, sep = "\t", end = "", file = write)
+        if language in ("ron",) and findall(r"""[şţ]""", fields[2], flags = I):
+          print("Cedilla: possible homoglyph", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""\D:\d""", fields[2], flags = I):
+          print("Colon: not preceeded by digit", line, sep = "\t", end = "", file = write)
+        if language in ("ber", "fra", "kab") and findall(r"""[^\s\d]:""", fields[2], flags = I):
+          print("Colon: preceeded by letter or punctuation", line, sep = "\t", end = "", file = write)
+        if language not in ("ber", "fra", "kab") and findall(r"""\s:""", fields[2], flags = I):
+          print("Colon: preceeded by space", line, sep = "\t", end = "", file = write)
+        if language in ("fin", "swe") and findall(r""":[^\w\s]""", fields[2], flags = I):
+          print("Colon: succeeded by punctuation", line, sep = "\t", end = "", file = write)
+        if language not in ("fin", "swe") and findall(r""":[^\d\s]""", fields[2], flags = I):
+          print("Colon: succeeded by letter or punctuation", line, sep = "\t", end = "", file = write)
+        if language in ("ber", "fra", "kab") and findall(r"""\d:\D""", fields[2], flags = I):
+          print("Colon: not succeeded by digit", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""\s,""", fields[2], flags = I):
+          print("Comma: preceeded by space", line, sep = "\t", end = "", file = write)
+        if findall(r"""\D,\d""", fields[2], flags = I):
+          print("Comma: not preceeded by digit", line, sep = "\t", end = "", file = write)
+        if findall(r""",[^\W\d]""", fields[2], flags = I):
+          print("Comma: succeeded by letter", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""[a-z][\u0430-\u044F]|[\u0430-\u044F][a-z]""", fields[2], flags = I):
+          print("Cyrillic characters: possible homoglyphs", line, sep = "\t", end = "", file = write)
+
+        if language in ("por",) and findall(r"""ü""", fields[2], flags = I):
+          print("Dieresis: not used", line, sep = "\t", end = "", file = write)
+
+        if language not in ("cmn", "jpn") and findall(r"""[０-９]""", fields[2], flags = I):
+          print("Digits: full-width digits", line, sep = "\t", end = "", file = write)
+        if findall(r"""[0-9].*[０-９]|[０-９].*[0-9]""", fields[2], flags = I):
+          print("Digits: mixed regular and full-width digits", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""\u2033""", fields[2], flags = I):
+          print("Double prime: possible homoglyph", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""([^.]|^)\.\.([^.]|$)""", fields[2], flags = I):
+          print("Ellipsis: too short", line, sep = "\t", end = "", file = write)
+
+        # if findall(r"""--|(\s|^)-(\s|$)""", fields[2], flags = I):
+        #   print("Em dash: homoglyph", line, sep = "\t", end = "", file = write)
+
+        # if findall(r"""\d-\d""", fields[2], flags = I):
+        #   print("En dash or figure dash: possible homoglyph", line, sep = "\t", end = "", file = write)
+
+        if language in ("fra",) and findall(r"""\w[!]""", fields[2], flags = I):
+          print("Exclamation mark: preceeded by letter or digit", line, sep = "\t", end = "", file = write)
+        if language not in ("fra",) and findall(r"""\s[!]""", fields[2], flags = I):
+          print("Exclamation mark: preceeded by space", line, sep = "\t", end = "", file = write)
+        if findall(r"""[!]\w""", fields[2], flags = I):
+          print("Exclamation mark: succeeded by letter or digit", line, sep = "\t", end = "", file = write)
+        if language in ("spa",) and findall(r"""\w[¡]""", fields[2], flags = I):
+          print("Inverted exclamation mark: preceeded by letter or digit", line, sep = "\t", end = "", file = write)
+        if language in ("spa",) and findall(r"""[¡]\s""", fields[2], flags = I):
+          print("Inverted exclamation mark: succeeded by space", line, sep = "\t", end = "", file = write)
+        if language in ("spa",) and findall(r"""^[^¡!]*[!]""", fields[2], flags = I):
+          print("Exclamation mark: unopened exclamation mark", line, sep = "\t", end = "", file = write)
+        if language in ("spa",) and findall(r"""[¡][^¡!]*$""", fields[2], flags = I):
+          print("Exclamation mark: unclosed exclamation mark", line, sep = "\t", end = "", file = write)
+        if language not in ("spa",) and findall(r"""[¡]""", fields[2], flags = I):
+          print("Inverted exclamation mark: not used", line, sep = "\t", end = "", file = write)
+
+        if language == "kor" and findall(r"""\w[^.…?!‽？~]*$""", fields[2], flags = I):
+          print("Final punctuation", line, sep = "\t", end = "", file = write)
+        if language != "kor" and findall(r"""\w[^.…?!‽]*$""", fields[2], flags = I):
+          print("Final punctuation", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""[a-z][α-ω]|[α-ω][a-z]""", fields[2], flags = I):
+          print("Greek characters: possible homoglyphs", line, sep = "\t", end = "", file = write)
+
+        if language in ("fin", "swe"):
+          for message in breaksrulesoffinnishguillemets(fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if language in ("ber", "fra", "kab", "vie"):
+          for message in breaksrulesoffrenchguillemets(fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if language in ("ces", "dan", "deu", "hun", "pol", "slk"):
+          for message in breaksrulesofsymmetricwrappingmarks("Guillemets", r"»", r"«", fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if language in ("cat", "epo", "est", "glg", "ita", "nob", "por", "ron", "spa", "tur"):
+          for message in breaksrulesofsymmetricwrappingmarks("Guillemets", r"«", r"»", fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if language in ("eng", "gle", "isl", "kor", "lat", "lit", "lvs", "nld", "tok") and findall(r"""[«»]""", fields[2], flags = I):
+          print("Guillemets: not used", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""\u05C1|\u05C2""", fields[2], flags = I):
+          print("Hebrew dot", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""\u200E""", fields[2], flags = I):
+          print("Left-to-right mark", line, sep = "\t", end = "", file = write)
+
+        if findall(r"""x\d|\dx|\d\s*x\s*\d""", fields[2], flags = I):
+          print("Multiplication sign: possible homoglyph", line, sep = "\t", end = "", file = write)
+
+        if language not in ("glg", "ita", "por", "spa") and findall(r"""º""", fields[2], flags = I):
+          print("Ordinal indicator: possible homoglyph", line, sep = "\t", end = "", file = write)
+
+        for message in breaksrulesofsymmetricwrappingmarks("Parentheses", r"\(", r"\)", fields[2]):
           print(message, line, sep = "\t", end = "", file = write)
-      if language in ("cat", "epo", "est", "glg", "ita", "nob", "por", "ron", "spa", "tur"):
-        for message in breaksrulesofsymmetricwrappingmarks("Guillemets", r"«", r"»", fields[2]):
-          print(message, line, sep = "\t", end = "", file = write)
-      if language in ("eng", "gle", "isl", "kor", "lat", "lit", "lvs", "nld", "tok") and findall(r"""[«»]""", fields[2], flags = I):
-        print("Guillemets: not used", line, sep = "\t", end = "", file = write)
 
-      if findall(r"""\u05C1|\u05C2""", fields[2], flags = I):
-        print("Hebrew dot", line, sep = "\t", end = "", file = write)
+        if language == "eng" and findall(r"""\s[.](?![\d.])""", fields[2], flags = I):
+          print("Period: preceeded by space", line, sep = "\t", end = "", file = write)
+        if language != "eng" and findall(r"""\s[.](?![.])""", fields[2], flags = I):
+          print("Period: preceeded by space", line, sep = "\t", end = "", file = write)
+        if language != "eng" and findall(r"""\D[.]\d""", fields[2], flags = I):
+          print("Period: not preceeded by digit", line, sep = "\t", end = "", file = write)
 
-      if findall(r"""\u200E""", fields[2], flags = I):
-        print("Left-to-right mark", line, sep = "\t", end = "", file = write)
+        if findall(r"""\u2032""", fields[2], flags = I):
+          print("Prime: possible homoglyph", line, sep = "\t", end = "", file = write)
 
-      if findall(r"""x\d|\dx|\d\s*x\s*\d""", fields[2], flags = I):
-        print("Multiplication sign: possible homoglyph", line, sep = "\t", end = "", file = write)
+        if language in ("fra",) and findall(r"""\w[?]""", fields[2], flags = I):
+          print("Question mark: preceeded by letter or digit", line, sep = "\t", end = "", file = write)
+        if language not in ("fra",) and findall(r"""\s[?]""", fields[2], flags = I):
+          print("Question mark: preceeded by space", line, sep = "\t", end = "", file = write)
+        if findall(r"""[?]\w""", fields[2], flags = I):
+          print("Question mark: succeeded by letter or digit", line, sep = "\t", end = "", file = write)
+        if language in ("spa",) and findall(r"""\w[¿]""", fields[2], flags = I):
+          print("Inverted question mark: preceeded by letter or digit", line, sep = "\t", end = "", file = write)
+        if language in ("spa",) and findall(r"""[¿]\s""", fields[2], flags = I):
+          print("Inverted question mark: succeeded by space", line, sep = "\t", end = "", file = write)
+        if language in ("spa",) and findall(r"""^[^¿?]*[?]""", fields[2], flags = I):
+          print("Question mark: unopened question mark", line, sep = "\t", end = "", file = write)
+        if language in ("spa",) and findall(r"""[¿][^¿?]*$""", fields[2], flags = I):
+          print("Question mark: unclosed question mark", line, sep = "\t", end = "", file = write)
+        if language not in ("spa",) and findall(r"""[¿]""", fields[2], flags = I):
+          print("Inverted question mark: not used", line, sep = "\t", end = "", file = write)
 
-      if language not in ("glg", "ita", "por", "spa") and findall(r"""º""", fields[2], flags = I):
-        print("Ordinal indicator: possible homoglyph", line, sep = "\t", end = "", file = write)
+        if language in ("ber", "cat", "dan", "eng", "fra", "gle", "glg", "ita", "kab", "kor", "lat", "lvs", "nld", "nob", "por", "spa", "tok", "tur", "vie"):
+          for message in breaksrulesofenglishquotationmarks(fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if language in ("fin", "swe"):
+          for message in breaksrulesoffinnishquotationmarks(fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if language in ("hun", "pol", "ron"):
+          for message in breaksrulesofpolishquotationmarks(fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if language in ("ces", "deu", "est", "isl", "lit", "slk"):
+          for message in breaksrulesofgermanquotationmarks(fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if language in ("ber", "cat", "dan", "eng", "fra", "glg", "ita", "kab", "kor", "lat", "lvs", "nld", "nob", "por", "spa", "tok", "tur", "vie"):
+          for message in breaksrulesofstraightquotationmarks(fields[2]):
+            print(message, line, sep = "\t", end = "", file = write)
+        if findall(r""",,|''""", fields[2], flags = I):
+          print("Quotation marks: homoglyphs", line, sep = "\t", end = "", file = write)
+        if findall(r"""[‘’“”].*['"]|['"].*[‘’“”]""", fields[2], flags = I):
+          print("Quotation marks: mixed curly and straight", line, sep = "\t", end = "", file = write)
 
-      for message in breaksrulesofsymmetricwrappingmarks("Parentheses", r"\(", r"\)", fields[2]):
-        print(message, line, sep = "\t", end = "", file = write)
+        if language in ("ber", "fra", "kab") and findall(r"""\S;""", fields[2], flags = I):
+          print("Semicolon: not preceeded by space", line, sep = "\t", end = "", file = write)
+        if language not in ("ber", "fra", "kab") and findall(r"""\s;""", fields[2], flags = I):
+          print("Semicolon: preceeded by space", line, sep = "\t", end = "", file = write)
+        if findall(r""";\w""", fields[2], flags = I):
+          print("Semicolon: succeeded by letter or digit", line, sep = "\t", end = "", file = write)
 
-      if language == "eng" and findall(r"""\s[.](?![\d.])""", fields[2], flags = I):
-        print("Period: preceeded by space", line, sep = "\t", end = "", file = write)
-      if language != "eng" and findall(r"""\s[.](?![.])""", fields[2], flags = I):
-        print("Period: preceeded by space", line, sep = "\t", end = "", file = write)
-      if language != "eng" and findall(r"""\D[.]\d""", fields[2], flags = I):
-        print("Period: not preceeded by digit", line, sep = "\t", end = "", file = write)
+        if findall(r"""\u200B""", fields[2], flags = I):
+          print("Zero-width space", line, sep = "\t", end = "", file = write)
 
-      if findall(r"""\u2032""", fields[2], flags = I):
-        print("Prime: possible homoglyph", line, sep = "\t", end = "", file = write)
-
-      if language in ("fra",) and findall(r"""\w[?]""", fields[2], flags = I):
-        print("Question mark: preceeded by letter or digit", line, sep = "\t", end = "", file = write)
-      if language not in ("fra",) and findall(r"""\s[?]""", fields[2], flags = I):
-        print("Question mark: preceeded by space", line, sep = "\t", end = "", file = write)
-      if findall(r"""[?]\w""", fields[2], flags = I):
-        print("Question mark: succeeded by letter or digit", line, sep = "\t", end = "", file = write)
-      if language in ("spa",) and findall(r"""\w[¿]""", fields[2], flags = I):
-        print("Inverted question mark: preceeded by letter or digit", line, sep = "\t", end = "", file = write)
-      if language in ("spa",) and findall(r"""[¿]\s""", fields[2], flags = I):
-        print("Inverted question mark: succeeded by space", line, sep = "\t", end = "", file = write)
-      if language in ("spa",) and findall(r"""^[^¿?]*[?]""", fields[2], flags = I):
-        print("Question mark: unopened question mark", line, sep = "\t", end = "", file = write)
-      if language in ("spa",) and findall(r"""[¿][^¿?]*$""", fields[2], flags = I):
-        print("Question mark: unclosed question mark", line, sep = "\t", end = "", file = write)
-      if language not in ("spa",) and findall(r"""[¿]""", fields[2], flags = I):
-        print("Inverted question mark: not used", line, sep = "\t", end = "", file = write)
-
-      if language in ("ber", "cat", "dan", "eng", "fra", "gle", "glg", "ita", "kab", "kor", "lat", "lvs", "nld", "nob", "por", "spa", "tok", "tur", "vie"):
-        for message in breaksrulesofenglishquotationmarks(fields[2]):
-          print(message, line, sep = "\t", end = "", file = write)
-      if language in ("fin", "swe"):
-        for message in breaksrulesoffinnishquotationmarks(fields[2]):
-          print(message, line, sep = "\t", end = "", file = write)
-      if language in ("hun", "pol", "ron"):
-        for message in breaksrulesofpolishquotationmarks(fields[2]):
-          print(message, line, sep = "\t", end = "", file = write)
-      if language in ("ces", "deu", "est", "isl", "lit", "slk"):
-        for message in breaksrulesofgermanquotationmarks(fields[2]):
-          print(message, line, sep = "\t", end = "", file = write)
-      if language in ("ber", "cat", "dan", "eng", "fra", "glg", "ita", "kab", "kor", "lat", "lvs", "nld", "nob", "por", "spa", "tok", "tur", "vie"):
-        for message in breaksrulesofstraightquotationmarks(fields[2]):
-          print(message, line, sep = "\t", end = "", file = write)
-      if findall(r""",,|''""", fields[2], flags = I):
-        print("Quotation marks: homoglyphs", line, sep = "\t", end = "", file = write)
-      if findall(r"""[‘’“”].*['"]|['"].*[‘’“”]""", fields[2], flags = I):
-        print("Quotation marks: mixed curly and straight", line, sep = "\t", end = "", file = write)
-
-      if language in ("ber", "fra", "kab") and findall(r"""\S;""", fields[2], flags = I):
-        print("Semicolon: not preceeded by space", line, sep = "\t", end = "", file = write)
-      if language not in ("ber", "fra", "kab") and findall(r"""\s;""", fields[2], flags = I):
-        print("Semicolon: preceeded by space", line, sep = "\t", end = "", file = write)
-      if findall(r""";\w""", fields[2], flags = I):
-        print("Semicolon: succeeded by letter or digit", line, sep = "\t", end = "", file = write)
-
-      if findall(r"""\u200B""", fields[2], flags = I):
-        print("Zero-width space", line, sep = "\t", end = "", file = write)
-
-      for word in gettokens(fields[2]):
-        if word in misspelled:
-          print("Misspelling: " + word + " -> " + misspelled[word], line, sep = "\t", end = "", file = write)
-
-      for word in gettokens(fields[2]):
-        if word in foreign:
-          print("Foreign: " + word + " = " + foreign[word], line, sep = "\t", end = "", file = write)
-    read.close()
+        for token in gettokensinlanguage(janome, kkma, language, fields[2]):
+          if token in misspelled:
+            print("Misspelling: " + token + " -> " + misspelled[token], line, sep = "\t", end = "", file = write)
+          elif token in foreign:
+            print("Foreign: " + token + " = " + foreign[token], line, sep = "\t", end = "", file = write)
+          elif token in sensitive:
+            print("Sensitive: " + token, line, sep = "\t", end = "", file = write)
+      read.close()
     write.close()
 
 def findsimilar():
@@ -711,15 +674,11 @@ def findsimilar():
   for language in write:
     write[language].close()
 
-listlanguages()
-print("")
 partitionsentences()
-print("")
-subpartitionsentences()
 print("")
 partitionlinks()
 print("")
-subpartitionlinks()
+listlanguages()
 print("")
 listusers()
 print("")
