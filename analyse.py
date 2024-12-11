@@ -75,13 +75,14 @@ def partitionsentences():
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
   for line in read:
     fields = findall(r"[^\t\n]+", line)
-    if fields[1] != "\\N":
-      makedirs("temporary/sentences/" + fields[1], exist_ok = True)
-      if fields[1] not in write:
-        write[fields[1]] = {}
-      if fields[3] not in write[fields[1]]:
-        write[fields[1]][fields[3]] = open("temporary/sentences/" + fields[1] + "/" + fields[3], "w", encoding = "utf-8")
-      print(line, end = "", file = write[fields[1]][fields[3]])
+    if fields[1] == "\\N":
+      fields[1] = "ε"
+    makedirs("temporary/sentences/" + fields[1], exist_ok = True)
+    if fields[1] not in write:
+      write[fields[1]] = {}
+    if fields[3] not in write[fields[1]]:
+      write[fields[1]][fields[3]] = open("temporary/sentences/" + fields[1] + "/" + fields[3], "w", encoding = "utf-8")
+    print(line, end = "", file = write[fields[1]][fields[3]])
   read.close()
   for language in write:
     for user in write[language]:
@@ -94,6 +95,8 @@ def partitionlinks():
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
   for line in read:
     fields = findall(r"[^\t\n]+", line)
+    if fields[1] == "\\N":
+      fields[1] = "ε"
     languages[int(fields[0])] = fields[1]
   read.close()
 
@@ -103,7 +106,7 @@ def partitionlinks():
   read = open("links.csv", "r", encoding = "utf-8")
   for line in read:
     fields = findall(r"[^\t\n]+", line)
-    if int(fields[0]) in languages and languages[int(fields[0])] != "\\N" and int(fields[1]) in languages and languages[int(fields[1])] != "\\N":
+    if int(fields[0]) in languages and int(fields[1]) in languages:
       makedirs("temporary/links/" + languages[int(fields[0])], exist_ok = True)
       if languages[int(fields[0])] not in write:
         write[languages[int(fields[0])]] = {}
@@ -124,6 +127,8 @@ def listlanguages():
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
   for line in read:
     fields = findall(r"[^\t\n]+", line)
+    if fields[1] == "\\N":
+      fields[1] = "ε"
     if fields[1] not in frequencies:
       frequencies[fields[1]] = {}
       sentences[fields[1]] = {}
@@ -662,12 +667,13 @@ def findsimilar():
   read = open("sentences_detailed.csv", "r", encoding = "utf-8")
   for line in read:
     fields = findall(r"[^\t\n]+", line)
+    if fields[1] == "\\N":
+      fields[1] = "ε"
     hashed = hash(cleanupforhashing(fields[2]))
     if hashed in seen:
-      if fields[1] != "\\N":
-        if fields[1] not in write:
-          write[fields[1]] = open("similar/similar-" + fields[1] + ".txt", "w", encoding = "utf-8")
-        print(seen[hashed], line, sep = "\t", end = "", file = write[fields[1]])
+      if fields[1] not in write:
+        write[fields[1]] = open("similar/similar-" + fields[1] + ".txt", "w", encoding = "utf-8")
+      print(seen[hashed], line, sep = "\t", end = "", file = write[fields[1]])
     else:
       seen[hashed] = int(fields[0])
   read.close()
